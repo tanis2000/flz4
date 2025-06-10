@@ -15,7 +15,7 @@ jobs:
     # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: windows-2019
+    runs-on: windows-2025
 
     env:
       RELEASE_NAME: flz4-windows-x64
@@ -37,9 +37,6 @@ jobs:
           cd ${{github.workspace}}/build
           mkdir ${{ env.RELEASE_NAME }}
           cd ${{ env.RELEASE_NAME }}
-          mkdir include
-          mkdir include/backend
-          mkdir lib
           cd ../..
 
       # Setup MSBuild.exe path if required

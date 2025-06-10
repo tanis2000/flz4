@@ -37,9 +37,6 @@ jobs:
           cd ${{github.workspace}}/build
           mkdir ${{ env.RELEASE_NAME }}
           cd ${{ env.RELEASE_NAME }}
-          mkdir include
-          mkdir include/backend
-          mkdir lib
           cd ../..
 
       - name: Configure CMake
