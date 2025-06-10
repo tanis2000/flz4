@@ -64,7 +64,10 @@ jobs:
       - name: Generate artefacts
         shell: cmd
         run: |
-          copy /Y .\build\src\${{env.BUILD_TYPE}}\uncompress.exe .\build\${{ env.RELEASE_NAME }}\lib
+          dir .\build\
+          dir .\build\src\
+          dir .\build\src\${{env.BUILD_TYPE}}\
+          copy /Y .\build\src\${{env.BUILD_TYPE}}\uncompress.exe .\build\${{ env.RELEASE_NAME }}\
           cd build
           7z a ./${{ env.RELEASE_NAME }}.zip ./${{ env.RELEASE_NAME }}
 
