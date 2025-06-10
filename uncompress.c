@@ -1,9 +1,13 @@
-/* LZ4file API example : compress a file
- * Modified from an example code by anjiahao
+/*
+ * FLZ4 Uncompress utility
  *
- * This example will demonstrate how
- * to manipulate lz4 compressed files like
- * normal files */
+ * Unpacks Fortinet LZ4 compressed files.
+ *
+ * Copyright(C)2025 Valerio Santinelli
+ * Licensed under the MIT License.
+ * See LICENSE file in the project root for full license information.
+ *
+ */
 
 #include <assert.h>
 #include <stdio.h>
@@ -16,7 +20,7 @@
 #include "lz4.h"
 
 
-// #define CHUNK_SIZE (16*1024)
+// This is fixed for Fortinet files. It is always 4 butes.
 #define CHUNK_SIZE (4)
 
 #define ERR_DIRECTORY_CREATE_FAILURE (-8)
@@ -30,119 +34,90 @@
 #define COMPRESSED_OFFSET (4)
 #define COMPRESSED_BUF_SIZE (65536)
 #define DECOMPRESSED_BUF_SIZE (65536)
+#define MAGIC_NUMBER (0x345a4c46)
 
-static size_t get_file_size(char *filename)
+static int decode_next_block(FILE* in, int compressedLen, FILE* out)
 {
-    struct stat statbuf;
-
-    if (filename == NULL) {
-        return 0;
-    }
-
-    if(stat(filename,&statbuf)) {
-        return 0;
-    }
-
-    return (size_t)statbuf.st_size;
-}
-
-static int print_next_block(FILE *in, int compressedLen, FILE *out) {
     char compressedBuffer[COMPRESSED_BUF_SIZE];
     char decompressedBuffer[DECOMPRESSED_BUF_SIZE];
     size_t readBytes = fread(compressedBuffer, 1, compressedLen, in);
-    if (readBytes == 0) {
+    if (readBytes == 0)
+    {
         return ERR_STREAM_READ_FAILURE;
     }
-    if (readBytes != compressedLen) {
+    if (readBytes != compressedLen)
+    {
         return ERR_INVALID_COMPRESSED_LEN;
     }
 
-    int decompressedLen = LZ4_decompress_safe(compressedBuffer, decompressedBuffer, compressedLen, DECOMPRESSED_BUF_SIZE);
+    int decompressedLen = LZ4_decompress_safe(compressedBuffer, decompressedBuffer, compressedLen,
+                                              DECOMPRESSED_BUF_SIZE);
     size_t bytesWritten = fwrite(decompressedBuffer, 1, decompressedLen, out);
-    if (bytesWritten <= 0) {
+    if (bytesWritten <= 0)
+    {
         return ERR_STREAM_WRITE_FAILURE;
     }
     return 0;
 }
 
+static int to_little_endian(char buf[4])
+{
+    int res = ((unsigned char)buf[0]) |
+        ((unsigned char)buf[1] << 8) |
+        ((unsigned char)buf[2] << 16) |
+        ((unsigned char)buf[3] << 24);
+    return res;
+}
+
 
 static int decompress_file(FILE* f_in, FILE* f_out)
 {
-    assert(f_in != NULL); assert(f_out != NULL);
-
-    LZ4F_errorCode_t ret = LZ4F_OK_NoError;
-    LZ4_readFile_t* lz4fRead;
-    void* const buf= malloc(CHUNK_SIZE);
-    if (!buf) {
-        printf("error: memory allocation failed \n");
-        return 1;
-    }
+    assert(f_in != NULL);
+    assert(f_out != NULL);
 
     int good_blocks = 0;
     char compressedLenBytes[4];
-    while (fread(&compressedLenBytes, 1, 4, f_in) == 4) {
-        int compressedLen = ((unsigned char)compressedLenBytes[0]) |
-                            ((unsigned char)compressedLenBytes[1] << 8) |
-                            ((unsigned char)compressedLenBytes[2] << 16) |
-                            ((unsigned char)compressedLenBytes[3] << 24);
-            if (print_next_block(f_in, compressedLen, f_out) == 0) {
-                good_blocks++;
-            }else {
-                printf("Some invalid compressed length encountered!\n");
-                return 1;
+    if (fread(&compressedLenBytes, 1, 4, f_in) != 4)
+    {
+        printf("Cannot read the beginning of the file\n");
+        return 1;
+    }
+    int magicNumber = to_little_endian(compressedLenBytes);
+    if (magicNumber != MAGIC_NUMBER)
+    {
+        printf("Invalid magic number\n");
+        return 1;
+    }
+    while (fread(&compressedLenBytes, 1, 4, f_in) == 4)
+    {
+        int compressedLen = to_little_endian(compressedLenBytes);
+        if (decode_next_block(f_in, compressedLen, f_out) == 0)
+        {
+            good_blocks++;
+        }
+        else
+        {
+            printf("Some invalid compressed length encountered!\n");
+            return 1;
         }
     }
-
-    // ret = LZ4F_readOpen(&lz4fRead, f_in);
-    // if (LZ4F_isError(ret)) {
-    //     printf("LZ4F_readOpen error: %s\n", LZ4F_getErrorName(ret));
-    //     free(buf);
-    //     return 1;
-    // }
-//
-//     while (1) {
-//         ret = LZ4F_read(lz4fRead, buf, CHUNK_SIZE);
-//         if (LZ4F_isError(ret)) {
-//             printf("LZ4F_read error: %s\n", LZ4F_getErrorName(ret));
-//             goto out;
-//         }
-//
-//         /* nothing to read */
-//         if (ret == 0) {
-//             break;
-//         }
-//
-//         if(fwrite(buf, 1, ret, f_out) != ret) {
-//             printf("write error!\n");
-//             goto out;
-//         }
-//     }
-//
-// out:
-//     free(buf);
-//     if (LZ4F_isError(LZ4F_readClose(lz4fRead))) {
-//         printf("LZ4F_readClose: %s\n", LZ4F_getErrorName(ret));
-//         return 1;
-//     }
-//
-//     if (ret) {
-//         return 1;
-//     }
 
     return 0;
 }
 
-int main(int argc, const char **argv) {
-    char inpFilename[256] = { 0 };
-    char decFilename[256] = { 0 };
+int main(int argc, const char** argv)
+{
+    char inpFilename[1024] = {0};
+    char decFilename[1024] = {0};
 
-    if (argc < 2) {
-        printf("Please specify input filename\n");
+    if (argc < 2)
+    {
+        printf("Please specify the input filename\n");
         return 0;
     }
 
-    snprintf(inpFilename, 256, "%s", argv[1]);
-    snprintf(decFilename, 256, "%s.dec", argv[1]);
+    snprintf(inpFilename, 1024, "%s", argv[1]);
+    snprintf(decFilename, 1024, "%s.dec", argv[1]);
 
     printf("inp = [%s]\n", inpFilename);
     printf("dec = [%s]\n", decFilename);
@@ -161,13 +136,12 @@ int main(int argc, const char **argv) {
         fclose(outFp);
         fclose(inpFp);
 
-        if (ret) {
-            printf("compression error: %s\n", LZ4F_getErrorName(ret));
+        if (ret)
+        {
+            printf("compression error\n");
             return 1;
         }
 
         printf("decompress : done\n");
     }
-
-
 }
